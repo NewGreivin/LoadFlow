@@ -6,8 +6,9 @@ import com.loadflow.protocol.ServerPingResult;
 import com.loadflow.protocol.ServerPingService;
 
 import javax.swing.*;
+import javax.swing.border.CompoundBorder;
 import javax.swing.border.EmptyBorder;
-import javax.swing.border.TitledBorder;
+import javax.swing.border.LineBorder;
 import java.awt.*;
 import java.util.function.Consumer;
 
@@ -18,7 +19,9 @@ public class ConfigPanel extends JPanel {
     private JTextField txtHost;
     private JSpinner spnPort;
     private JButton btnDetectServer;
-    private JLabel lblDetectResult;
+    private JPanel pnlDetectResult;
+    private JLabel lblDetectIcon;
+    private JLabel lblDetectText;
 
     private JComboBox<String> cmbVersion;
     private JComboBox<String> cmbTargetType;
@@ -52,129 +55,301 @@ public class ConfigPanel extends JPanel {
         this.config = config;
         this.onStartTest = onStartTest;
 
-        setLayout(new BorderLayout(15, 15));
-        setBorder(new EmptyBorder(15, 25, 15, 25));
+        setLayout(new BorderLayout());
+        setBackground(new Color(20, 22, 27));
 
         initComponents();
     }
 
     private void initComponents() {
-        JPanel formContainer = new JPanel();
-        formContainer.setLayout(new BoxLayout(formContainer, BoxLayout.Y_AXIS));
+        // Contenedor principal con scroll suave
+        JPanel mainContent = new JPanel();
+        mainContent.setLayout(new BoxLayout(mainContent, BoxLayout.Y_AXIS));
+        mainContent.setBorder(new EmptyBorder(20, 35, 20, 35));
+        mainContent.setBackground(new Color(20, 22, 27));
 
-        // 1. Destino de Red y Auto-Detección
-        JPanel pnlTarget = new JPanel(new BorderLayout(10, 10));
-        pnlTarget.setBorder(BorderFactory.createTitledBorder(BorderFactory.createEtchedBorder(), "1. Servidor de Destino y Detección Automática", TitledBorder.LEFT, TitledBorder.TOP));
+        // 1. CARD: SERVIDOR Y DETECCIÓN
+        mainContent.add(createTargetCard());
+        mainContent.add(Box.createVerticalStrut(18));
 
-        JPanel targetGrid = new JPanel(new GridLayout(2, 3, 10, 10));
-        targetGrid.add(new JLabel("Host / Dirección IP:"));
-        txtHost = new JTextField(config.getHost());
-        targetGrid.add(txtHost);
+        // 2. CARD: PROTOCOLO & PROXIES
+        mainContent.add(createProtocolCard());
+        mainContent.add(Box.createVerticalStrut(18));
 
-        btnDetectServer = new JButton("🔍 Auto-Detectar Servidor");
-        btnDetectServer.setFont(btnDetectServer.getFont().deriveFont(Font.BOLD, 12f));
-        btnDetectServer.setBackground(new Color(52, 152, 219));
-        btnDetectServer.setForeground(Color.WHITE);
-        targetGrid.add(btnDetectServer);
+        // 3. CARD: PARÁMETROS DE CARGA
+        mainContent.add(createLoadParamsCard());
+        mainContent.add(Box.createVerticalStrut(18));
 
-        targetGrid.add(new JLabel("Puerto:"));
-        spnPort = new JSpinner(new SpinnerNumberModel(config.getPort(), 1, 65535, 1));
-        targetGrid.add(spnPort);
+        // 4. CARD: COMPORTAMIENTO & SEGURIDAD
+        mainContent.add(createSafetyCard());
+        mainContent.add(Box.createVerticalStrut(20));
 
-        lblDetectResult = new JLabel("Haz clic en 'Auto-Detectar Servidor' para probar ping y versión.");
-        lblDetectResult.setForeground(Color.GRAY);
-        targetGrid.add(lblDetectResult);
+        JScrollPane scrollPane = new JScrollPane(mainContent);
+        scrollPane.setBorder(null);
+        scrollPane.getVerticalScrollBar().setUnitIncrement(16);
+        scrollPane.setBackground(new Color(20, 22, 27));
+        add(scrollPane, BorderLayout.CENTER);
 
-        pnlTarget.add(targetGrid, BorderLayout.CENTER);
-        formContainer.add(pnlTarget);
-        formContainer.add(Box.createVerticalStrut(10));
+        // BARRA INFERIOR MODERNA
+        JPanel bottomBar = new JPanel(new BorderLayout());
+        bottomBar.setBackground(new Color(26, 29, 36));
+        bottomBar.setBorder(new CompoundBorder(
+            BorderFactory.createMatteBorder(1, 0, 0, 0, new Color(42, 47, 58)),
+            new EmptyBorder(14, 35, 14, 35)
+        ));
 
-        // 2. Multiversión y Soporte de Proxies
-        JPanel pnlVersion = new JPanel(new GridLayout(3, 2, 12, 10));
-        pnlVersion.setBorder(BorderFactory.createTitledBorder(BorderFactory.createEtchedBorder(), "2. Compatibilidad Multiversión y Proxies (Velocity / BungeeCord)", TitledBorder.LEFT, TitledBorder.TOP));
+        JLabel lblSummary = new JLabel("💡 Configura los parámetros y haz clic en Iniciar para ejecutar la rampa.");
+        lblSummary.setForeground(new Color(156, 163, 175));
+        lblSummary.setFont(lblSummary.getFont().deriveFont(12.5f));
+        bottomBar.add(lblSummary, BorderLayout.WEST);
 
-        pnlVersion.add(new JLabel("Versión del Protocolo:"));
-        cmbVersion = new JComboBox<>(VERSION_OPTIONS);
-        cmbVersion.setEditable(true); // Permite escribir versiones o protocolos personalizados
-        cmbVersion.setSelectedIndex(4); // 1.20.5 por defecto
-        pnlVersion.add(cmbVersion);
-
-        pnlVersion.add(new JLabel("Tipo de Destino / Red:"));
-        cmbTargetType = new JComboBox<>(new String[]{
-            "Directo (Paper / Purpur / Spigot)",
-            "Proxy Velocity",
-            "Proxy BungeeCord / Waterfall"
-        });
-        pnlVersion.add(cmbTargetType);
-
-        pnlVersion.add(new JLabel("Comando inicial tras conectar (opcional, ej: /server lobby):"));
-        txtInitialCommand = new JTextField(config.getInitialCommand());
-        pnlVersion.add(txtInitialCommand);
-
-        formContainer.add(pnlVersion);
-        formContainer.add(Box.createVerticalStrut(10));
-
-        // 3. Parámetros de Carga
-        JPanel pnlLoad = new JPanel(new GridLayout(4, 2, 12, 8));
-        pnlLoad.setBorder(BorderFactory.createTitledBorder(BorderFactory.createEtchedBorder(), "3. Parámetros de Carga y Simulación", TitledBorder.LEFT, TitledBorder.TOP));
-
-        pnlLoad.add(new JLabel("Cantidad Objetivo de Bots:"));
-        spnTargetBots = new JSpinner(new SpinnerNumberModel(config.getTargetBots(), 1, 5000, 5));
-        pnlLoad.add(spnTargetBots);
-
-        pnlLoad.add(new JLabel("Rampa (Bots Nuevos por Segundo):"));
-        spnRampRate = new JSpinner(new SpinnerNumberModel(config.getRampRatePerSec(), 1, 200, 1));
-        pnlLoad.add(spnRampRate);
-
-        pnlLoad.add(new JLabel("Duración Máxima de la Prueba (segundos, 0 = ilimitado):"));
-        spnDuration = new JSpinner(new SpinnerNumberModel(config.getDurationSeconds(), 0, 86400, 30));
-        pnlLoad.add(spnDuration);
-
-        pnlLoad.add(new JLabel("Prefijo de Nombre de Bots:"));
-        txtPrefix = new JTextField(config.getBotPrefix());
-        pnlLoad.add(txtPrefix);
-
-        formContainer.add(pnlLoad);
-        formContainer.add(Box.createVerticalStrut(10));
-
-        // 4. Comportamiento y Seguridad
-        JPanel pnlSafety = new JPanel(new GridLayout(3, 2, 12, 8));
-        pnlSafety.setBorder(BorderFactory.createTitledBorder(BorderFactory.createEtchedBorder(), "4. Perfil de Comportamiento y Circuit Breaker", TitledBorder.LEFT, TitledBorder.TOP));
-
-        pnlSafety.add(new JLabel("Perfil de Jugador:"));
-        cmbProfile = new JComboBox<>(new String[]{"AFK (Rotación ligera / Anti-inactividad)", "EXPLORER (Movimiento y pasos aleatorios)"});
-        pnlSafety.add(cmbProfile);
-
-        pnlSafety.add(new JLabel("Detener automáticamente si hay demasiados errores:"));
-        chkCircuitBreaker = new JCheckBox("Activar Circuit Breaker", config.isAutoStopOnError());
-        pnlSafety.add(chkCircuitBreaker);
-
-        pnlSafety.add(new JLabel("Umbral Máximo de Fallos (%):"));
-        spnThreshold = new JSpinner(new SpinnerNumberModel(config.getMaxErrorThresholdPct(), 5.0, 100.0, 5.0));
-        pnlSafety.add(spnThreshold);
-
-        formContainer.add(pnlSafety);
-
-        add(new JScrollPane(formContainer), BorderLayout.CENTER);
-
-        // Barra inferior con botón de inicio
-        JPanel bottomBar = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         JButton btnLaunch = new JButton("▶ Iniciar Prueba de Carga");
         btnLaunch.setFont(btnLaunch.getFont().deriveFont(Font.BOLD, 14f));
-        btnLaunch.setBackground(new Color(40, 167, 69));
+        btnLaunch.setBackground(new Color(16, 185, 129));
         btnLaunch.setForeground(Color.WHITE);
-        btnLaunch.setPreferredSize(new Dimension(280, 42));
+        btnLaunch.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        btnLaunch.setPreferredSize(new Dimension(260, 44));
+        btnLaunch.putClientProperty("JButton.buttonType", "roundRect");
 
         btnLaunch.addActionListener(e -> {
             applyValuesToConfig();
             onStartTest.accept(config);
         });
 
-        bottomBar.add(btnLaunch);
+        bottomBar.add(btnLaunch, BorderLayout.EAST);
         add(bottomBar, BorderLayout.SOUTH);
 
-        // Action de detección automática
         btnDetectServer.addActionListener(e -> performServerDetection());
+    }
+
+    private JPanel createTargetCard() {
+        JPanel card = createCardContainer("🌐 1. Servidor de Destino & Detección Automática");
+        JPanel content = new JPanel(new GridBagLayout());
+        content.setOpaque(false);
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.insets = new Insets(6, 8, 6, 8);
+
+        // Fila 1: Host
+        gbc.gridx = 0; gbc.gridy = 0; gbc.weightx = 0.0;
+        content.add(createFieldLabel("Host / IP:"), gbc);
+
+        gbc.gridx = 1; gbc.gridy = 0; gbc.weightx = 0.55;
+        txtHost = new JTextField(config.getHost());
+        txtHost.setPreferredSize(new Dimension(220, 36));
+        txtHost.putClientProperty("JTextField.placeholderText", "127.0.0.1 o mc.servidor.com");
+        content.add(txtHost, gbc);
+
+        // Puerto
+        gbc.gridx = 2; gbc.gridy = 0; gbc.weightx = 0.0;
+        content.add(createFieldLabel("Puerto:"), gbc);
+
+        gbc.gridx = 3; gbc.gridy = 0; gbc.weightx = 0.15;
+        spnPort = new JSpinner(new SpinnerNumberModel(config.getPort(), 1, 65535, 1));
+        spnPort.setPreferredSize(new Dimension(90, 36));
+        content.add(spnPort, gbc);
+
+        // Botón Detectar
+        gbc.gridx = 4; gbc.gridy = 0; gbc.weightx = 0.3;
+        btnDetectServer = new JButton("🔍 Auto-Detectar Servidor");
+        btnDetectServer.setFont(btnDetectServer.getFont().deriveFont(Font.BOLD, 12f));
+        btnDetectServer.setBackground(new Color(37, 99, 235));
+        btnDetectServer.setForeground(Color.WHITE);
+        btnDetectServer.setPreferredSize(new Dimension(190, 36));
+        btnDetectServer.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        btnDetectServer.putClientProperty("JButton.buttonType", "roundRect");
+        content.add(btnDetectServer, gbc);
+
+        // Fila 2: Chip de resultado de detección
+        gbc.gridx = 0; gbc.gridy = 1; gbc.gridwidth = 5; gbc.weightx = 1.0;
+        gbc.insets = new Insets(10, 8, 4, 8);
+
+        pnlDetectResult = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 8));
+        pnlDetectResult.setBackground(new Color(28, 32, 42));
+        pnlDetectResult.setBorder(new CompoundBorder(
+            new LineBorder(new Color(45, 52, 68), 1, true),
+            new EmptyBorder(2, 8, 2, 8)
+        ));
+
+        lblDetectIcon = new JLabel("⚡");
+        lblDetectText = new JLabel("Listo para probar conexión. Haz clic en 'Auto-Detectar Servidor' para identificar versión y proxy.");
+        lblDetectText.setForeground(new Color(156, 163, 175));
+        lblDetectText.setFont(lblDetectText.getFont().deriveFont(12f));
+
+        pnlDetectResult.add(lblDetectIcon);
+        pnlDetectResult.add(lblDetectText);
+        content.add(pnlDetectResult, gbc);
+
+        card.add(content, BorderLayout.CENTER);
+        return card;
+    }
+
+    private JPanel createProtocolCard() {
+        JPanel card = createCardContainer("🔄 2. Compatibilidad Multiversión & Redes / Proxies");
+        JPanel content = new JPanel(new GridLayout(2, 2, 20, 12));
+        content.setOpaque(false);
+        content.setBorder(new EmptyBorder(6, 8, 6, 8));
+
+        // Versión
+        JPanel pnlVer = new JPanel(new BorderLayout(0, 4));
+        pnlVer.setOpaque(false);
+        pnlVer.add(createFieldLabel("Versión del Protocolo:"), BorderLayout.NORTH);
+        cmbVersion = new JComboBox<>(VERSION_OPTIONS);
+        cmbVersion.setPreferredSize(new Dimension(280, 36));
+        cmbVersion.setEditable(true);
+        cmbVersion.setSelectedIndex(0); // Auto-detectar por defecto
+        pnlVer.add(cmbVersion, BorderLayout.CENTER);
+        content.add(pnlVer);
+
+        // Tipo de Red
+        JPanel pnlNet = new JPanel(new BorderLayout(0, 4));
+        pnlNet.setOpaque(false);
+        pnlNet.add(createFieldLabel("Tipo de Red / Destino:"), BorderLayout.NORTH);
+        cmbTargetType = new JComboBox<>(new String[]{
+            "Directo (Paper / Purpur / Spigot)",
+            "Proxy Velocity",
+            "Proxy BungeeCord / Waterfall"
+        });
+        cmbTargetType.setPreferredSize(new Dimension(280, 36));
+        pnlNet.add(cmbTargetType, BorderLayout.CENTER);
+        content.add(pnlNet);
+
+        // Comando Inicial
+        JPanel pnlCmd = new JPanel(new BorderLayout(0, 4));
+        pnlCmd.setOpaque(false);
+        pnlCmd.add(createFieldLabel("Comando inicial tras conectar (opcional):"), BorderLayout.NORTH);
+        txtInitialCommand = new JTextField(config.getInitialCommand());
+        txtInitialCommand.setPreferredSize(new Dimension(280, 36));
+        txtInitialCommand.putClientProperty("JTextField.placeholderText", "ej: /server lobby o /server modalidad");
+        pnlCmd.add(txtInitialCommand, BorderLayout.CENTER);
+        content.add(pnlCmd);
+
+        // Explicación
+        JPanel pnlHint = new JPanel(new BorderLayout(0, 4));
+        pnlHint.setOpaque(false);
+        pnlHint.add(createFieldLabel("Modo de Operación:"), BorderLayout.NORTH);
+        JLabel lblHint = new JLabel("Soporta desde 1.16.5 hasta 1.21.4+. En proxies, los bots se moverán con el comando inicial.");
+        lblHint.setForeground(new Color(156, 163, 175));
+        lblHint.setFont(lblHint.getFont().deriveFont(11.5f));
+        pnlHint.add(lblHint, BorderLayout.CENTER);
+        content.add(pnlHint);
+
+        card.add(content, BorderLayout.CENTER);
+        return card;
+    }
+
+    private JPanel createLoadParamsCard() {
+        JPanel card = createCardContainer("⚡ 3. Parámetros de Carga & Simulación");
+        JPanel content = new JPanel(new GridLayout(2, 2, 20, 12));
+        content.setOpaque(false);
+        content.setBorder(new EmptyBorder(6, 8, 6, 8));
+
+        // Objetivo Bots
+        JPanel pnlBots = new JPanel(new BorderLayout(0, 4));
+        pnlBots.setOpaque(false);
+        pnlBots.add(createFieldLabel("Cantidad Objetivo de Bots:"), BorderLayout.NORTH);
+        spnTargetBots = new JSpinner(new SpinnerNumberModel(config.getTargetBots(), 1, 10000, 10));
+        spnTargetBots.setPreferredSize(new Dimension(200, 36));
+        pnlBots.add(spnTargetBots, BorderLayout.CENTER);
+        content.add(pnlBots);
+
+        // Rampa
+        JPanel pnlRamp = new JPanel(new BorderLayout(0, 4));
+        pnlRamp.setOpaque(false);
+        pnlRamp.add(createFieldLabel("Rampa de Conexión (Bots por segundo):"), BorderLayout.NORTH);
+        spnRampRate = new JSpinner(new SpinnerNumberModel(config.getRampRatePerSec(), 1, 500, 1));
+        spnRampRate.setPreferredSize(new Dimension(200, 36));
+        pnlRamp.add(spnRampRate, BorderLayout.CENTER);
+        content.add(pnlRamp);
+
+        // Duración
+        JPanel pnlDur = new JPanel(new BorderLayout(0, 4));
+        pnlDur.setOpaque(false);
+        pnlDur.add(createFieldLabel("Duración Máxima (segundos, 0 = sin límite):"), BorderLayout.NORTH);
+        spnDuration = new JSpinner(new SpinnerNumberModel(config.getDurationSeconds(), 0, 86400, 30));
+        spnDuration.setPreferredSize(new Dimension(200, 36));
+        pnlDur.add(spnDuration, BorderLayout.CENTER);
+        content.add(pnlDur);
+
+        // Prefijo
+        JPanel pnlPre = new JPanel(new BorderLayout(0, 4));
+        pnlPre.setOpaque(false);
+        pnlPre.add(createFieldLabel("Prefijo de Nombre de Bots:"), BorderLayout.NORTH);
+        txtPrefix = new JTextField(config.getBotPrefix());
+        txtPrefix.setPreferredSize(new Dimension(200, 36));
+        pnlPre.add(txtPrefix, BorderLayout.CENTER);
+        content.add(pnlPre);
+
+        card.add(content, BorderLayout.CENTER);
+        return card;
+    }
+
+    private JPanel createSafetyCard() {
+        JPanel card = createCardContainer("🛡️ 4. Perfil de Comportamiento & Circuit Breaker");
+        JPanel content = new JPanel(new GridLayout(1, 2, 20, 12));
+        content.setOpaque(false);
+        content.setBorder(new EmptyBorder(6, 8, 6, 8));
+
+        // Perfil
+        JPanel pnlProf = new JPanel(new BorderLayout(0, 4));
+        pnlProf.setOpaque(false);
+        pnlProf.add(createFieldLabel("Perfil de Comportamiento:"), BorderLayout.NORTH);
+        cmbProfile = new JComboBox<>(new String[]{
+            "AFK (Rotación ligera / Anti-inactividad)",
+            "EXPLORER (Movimiento y pasos aleatorios)"
+        });
+        cmbProfile.setPreferredSize(new Dimension(280, 36));
+        pnlProf.add(cmbProfile, BorderLayout.CENTER);
+        content.add(pnlProf);
+
+        // Circuit Breaker
+        JPanel pnlCB = new JPanel(new BorderLayout(0, 4));
+        pnlCB.setOpaque(false);
+        pnlCB.add(createFieldLabel("Protección Automática (Circuit Breaker):"), BorderLayout.NORTH);
+
+        JPanel cbControls = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
+        cbControls.setOpaque(false);
+        chkCircuitBreaker = new JCheckBox("Activar parada si errores >", config.isAutoStopOnError());
+        chkCircuitBreaker.setOpaque(false);
+
+        spnThreshold = new JSpinner(new SpinnerNumberModel(config.getMaxErrorThresholdPct(), 5.0, 100.0, 5.0));
+        spnThreshold.setPreferredSize(new Dimension(75, 34));
+
+        JLabel lblPct = new JLabel("%");
+        lblPct.setForeground(Color.GRAY);
+
+        cbControls.add(chkCircuitBreaker);
+        cbControls.add(spnThreshold);
+        cbControls.add(lblPct);
+
+        pnlCB.add(cbControls, BorderLayout.CENTER);
+        content.add(pnlCB);
+
+        card.add(content, BorderLayout.CENTER);
+        return card;
+    }
+
+    private JPanel createCardContainer(String title) {
+        JPanel card = new JPanel(new BorderLayout(0, 12));
+        card.setBackground(new Color(27, 30, 38));
+        card.setBorder(new CompoundBorder(
+            new LineBorder(new Color(42, 47, 60), 1, true),
+            new EmptyBorder(14, 18, 16, 18)
+        ));
+
+        JLabel lblTitle = new JLabel(title);
+        lblTitle.setFont(lblTitle.getFont().deriveFont(Font.BOLD, 13.5f));
+        lblTitle.setForeground(new Color(229, 231, 235));
+        card.add(lblTitle, BorderLayout.NORTH);
+
+        return card;
+    }
+
+    private JLabel createFieldLabel(String text) {
+        JLabel label = new JLabel(text);
+        label.setFont(label.getFont().deriveFont(Font.BOLD, 11.5f));
+        label.setForeground(new Color(156, 163, 175));
+        return label;
     }
 
     private void performServerDetection() {
@@ -182,14 +357,21 @@ public class ConfigPanel extends JPanel {
         int port = (Integer) spnPort.getValue();
 
         btnDetectServer.setEnabled(false);
-        lblDetectResult.setText("Consultando estado del servidor...");
-        lblDetectResult.setForeground(Color.YELLOW);
+        lblDetectIcon.setText("⏳");
+        lblDetectText.setText("Consultando ping y versión del servidor...");
+        lblDetectText.setForeground(new Color(234, 179, 8));
 
         ServerPingService.pingServerAsync(host, port).thenAccept(result -> SwingUtilities.invokeLater(() -> {
             btnDetectServer.setEnabled(true);
             if (result.isSuccess()) {
-                lblDetectResult.setText(result.getSummary());
-                lblDetectResult.setForeground(new Color(46, 204, 113));
+                lblDetectIcon.setText("✔");
+                lblDetectText.setText(result.getSummary());
+                lblDetectText.setForeground(new Color(52, 211, 153));
+                pnlDetectResult.setBackground(new Color(16, 38, 30));
+                pnlDetectResult.setBorder(new CompoundBorder(
+                    new LineBorder(new Color(16, 185, 129), 1, true),
+                    new EmptyBorder(2, 8, 2, 8)
+                ));
 
                 // Seleccionar versión en el combo
                 MinecraftVersion detected = result.getMatchedVersion();
@@ -202,15 +384,21 @@ public class ConfigPanel extends JPanel {
 
                 // Ajustar proxy si se detecta Velocity o BungeeCord
                 if (result.isVelocity()) {
-                    cmbTargetType.setSelectedIndex(1); // Velocity
+                    cmbTargetType.setSelectedIndex(1);
                 } else if (result.isBungeeCord()) {
-                    cmbTargetType.setSelectedIndex(2); // BungeeCord
+                    cmbTargetType.setSelectedIndex(2);
                 } else {
-                    cmbTargetType.setSelectedIndex(0); // Direct
+                    cmbTargetType.setSelectedIndex(0);
                 }
             } else {
-                lblDetectResult.setText("❌ " + result.getErrorMessage());
-                lblDetectResult.setForeground(new Color(231, 76, 60));
+                lblDetectIcon.setText("❌");
+                lblDetectText.setText("No se pudo conectar: " + result.getErrorMessage());
+                lblDetectText.setForeground(new Color(248, 113, 113));
+                pnlDetectResult.setBackground(new Color(45, 20, 24));
+                pnlDetectResult.setBorder(new CompoundBorder(
+                    new LineBorder(new Color(239, 68, 68), 1, true),
+                    new EmptyBorder(2, 8, 2, 8)
+                ));
             }
         }));
     }
@@ -220,8 +408,19 @@ public class ConfigPanel extends JPanel {
         config.setPort((Integer) spnPort.getValue());
 
         String versionSel = cmbVersion.getSelectedItem() != null ? cmbVersion.getSelectedItem().toString() : "";
-        config.setVersion(MinecraftVersion.fromString(versionSel));
-        config.setVersionInput(versionSel);
+        if (versionSel.contains("Auto-Detectar")) {
+            ServerPingResult ping = ServerPingService.pingServer(config.getHost(), config.getPort());
+            if (ping.isSuccess()) {
+                config.setVersion(ping.getMatchedVersion());
+                config.setVersionInput(ping.getVersionName());
+            } else {
+                config.setVersion(MinecraftVersion.V1_20_5);
+                config.setVersionInput("1.20.5");
+            }
+        } else {
+            config.setVersion(MinecraftVersion.fromString(versionSel));
+            config.setVersionInput(versionSel);
+        }
 
         int targetIdx = cmbTargetType.getSelectedIndex();
         config.setTargetType(targetIdx == 1 ? "VELOCITY" : (targetIdx == 2 ? "BUNGEECORD" : "DIRECT"));

@@ -3,7 +3,9 @@ package com.loadflow.ui;
 import com.loadflow.model.BotSession;
 
 import javax.swing.*;
+import javax.swing.border.CompoundBorder;
 import javax.swing.border.EmptyBorder;
+import javax.swing.border.LineBorder;
 import javax.swing.table.AbstractTableModel;
 import javax.swing.table.DefaultTableCellRenderer;
 import java.awt.*;
@@ -13,36 +15,79 @@ import java.util.List;
 public class BotMonitorPanel extends JPanel {
     private final BotTableModel tableModel = new BotTableModel();
     private final JTable table = new JTable(tableModel);
-    private final JTextField txtSearch = new JTextField(15);
+    private final JTextField txtSearch = new JTextField(16);
     private final JComboBox<String> cmbFilter = new JComboBox<>(new String[]{"Todos", "Conectados", "Conectando", "Fallidos / Expulsados"});
 
     public BotMonitorPanel() {
-        setLayout(new BorderLayout(10, 10));
-        setBorder(new EmptyBorder(15, 15, 15, 15));
+        setLayout(new BorderLayout(12, 12));
+        setBackground(new Color(20, 22, 27));
+        setBorder(new EmptyBorder(18, 30, 18, 30));
 
         initComponents();
     }
 
     private void initComponents() {
-        // Toolbar de filtros
-        JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
-        toolbar.add(new JLabel("Buscar Bot:"));
-        toolbar.add(txtSearch);
-        toolbar.add(new JLabel("Filtrar Estado:"));
-        toolbar.add(cmbFilter);
+        // Toolbar de filtros con diseño moderno
+        JPanel toolbar = new JPanel(new BorderLayout(12, 0));
+        toolbar.setBackground(new Color(27, 30, 38));
+        toolbar.setBorder(new CompoundBorder(
+            new LineBorder(new Color(42, 47, 60), 1, true),
+            new EmptyBorder(10, 16, 10, 16)
+        ));
 
-        JButton btnRefresh = new JButton("Actualizar Vista");
-        btnRefresh.addActionListener(e -> tableModel.fireTableDataChanged());
-        toolbar.add(btnRefresh);
+        JPanel leftFilters = new JPanel(new FlowLayout(FlowLayout.LEFT, 14, 0));
+        leftFilters.setOpaque(false);
+
+        JLabel lblSearch = new JLabel("🔍 Buscar Bot:");
+        lblSearch.setFont(lblSearch.getFont().deriveFont(Font.BOLD, 12f));
+        lblSearch.setForeground(new Color(209, 213, 219));
+
+        txtSearch.setPreferredSize(new Dimension(180, 34));
+        txtSearch.putClientProperty("JTextField.placeholderText", "Nombre o # del bot");
+
+        JLabel lblFilter = new JLabel("Estado:");
+        lblFilter.setFont(lblFilter.getFont().deriveFont(Font.BOLD, 12f));
+        lblFilter.setForeground(new Color(209, 213, 219));
+
+        cmbFilter.setPreferredSize(new Dimension(170, 34));
+
+        leftFilters.add(lblSearch);
+        leftFilters.add(txtSearch);
+        leftFilters.add(lblFilter);
+        leftFilters.add(cmbFilter);
+
+        JButton btnRefresh = new JButton("↻ Actualizar");
+        btnRefresh.setPreferredSize(new Dimension(110, 34));
+        btnRefresh.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        btnRefresh.putClientProperty("JButton.buttonType", "roundRect");
+        btnRefresh.addActionListener(e -> applyFilter());
+
+        toolbar.add(leftFilters, BorderLayout.WEST);
+        toolbar.add(btnRefresh, BorderLayout.EAST);
 
         add(toolbar, BorderLayout.NORTH);
 
-        // Tabla
-        table.setRowHeight(26);
+        // Tabla con diseño limpio
+        table.setRowHeight(32);
+        table.setShowGrid(false);
+        table.setIntercellSpacing(new Dimension(0, 1));
         table.getTableHeader().setReorderingAllowed(false);
+        table.getTableHeader().setPreferredSize(new Dimension(0, 36));
+        table.getTableHeader().setFont(table.getTableHeader().getFont().deriveFont(Font.BOLD, 12f));
+
+        // Renderers centrados y coloreados
+        table.getColumnModel().getColumn(0).setPreferredWidth(45);
+        table.getColumnModel().getColumn(1).setPreferredWidth(140);
+        table.getColumnModel().getColumn(2).setPreferredWidth(150);
         table.getColumnModel().getColumn(2).setCellRenderer(new StateCellRenderer());
+        table.getColumnModel().getColumn(3).setPreferredWidth(85);
+        table.getColumnModel().getColumn(4).setPreferredWidth(85);
+        table.getColumnModel().getColumn(5).setPreferredWidth(110);
+        table.getColumnModel().getColumn(6).setPreferredWidth(250);
 
         JScrollPane scrollPane = new JScrollPane(table);
+        scrollPane.setBorder(new LineBorder(new Color(42, 47, 60), 1, true));
+        scrollPane.getViewport().setBackground(new Color(24, 27, 34));
         add(scrollPane, BorderLayout.CENTER);
 
         txtSearch.addCaretListener(e -> applyFilter());
@@ -130,13 +175,17 @@ public class BotMonitorPanel extends JPanel {
             Component c = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
             String val = value != null ? value.toString() : "";
             if (val.contains("Conectado")) {
-                setForeground(new Color(46, 204, 113));
+                setForeground(new Color(52, 211, 153));
+                setFont(getFont().deriveFont(Font.BOLD));
             } else if (val.contains("Conectando") || val.contains("Autenticando") || val.contains("Configuración")) {
-                setForeground(new Color(241, 196, 15));
+                setForeground(new Color(251, 191, 36));
+                setFont(getFont().deriveFont(Font.PLAIN));
             } else if (val.contains("Expulsado") || val.contains("Error")) {
-                setForeground(new Color(231, 76, 60));
+                setForeground(new Color(248, 113, 113));
+                setFont(getFont().deriveFont(Font.BOLD));
             } else {
-                setForeground(Color.GRAY);
+                setForeground(new Color(156, 163, 175));
+                setFont(getFont().deriveFont(Font.PLAIN));
             }
             return c;
         }
