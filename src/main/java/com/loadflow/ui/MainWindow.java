@@ -26,6 +26,7 @@ public class MainWindow extends JFrame {
 
     private JLabel lblFooterStatus;
     private JLabel lblFooterMemory;
+    private JLabel mcBadge;
     private TestMetrics lastMetrics = new TestMetrics();
 
     public MainWindow() {
@@ -58,7 +59,7 @@ public class MainWindow extends JFrame {
         appTitle.setFont(appTitle.getFont().deriveFont(Font.BOLD, 16f));
         appTitle.setForeground(Color.WHITE);
 
-        JLabel mcBadge = new JLabel(" Protocolo: Minecraft 1.20.5 (766) | Java Edition ");
+        mcBadge = new JLabel(" Multiversión: 1.16 a 1.21.4 | Detección Automática & Proxies ");
         mcBadge.setOpaque(true);
         mcBadge.setBackground(new Color(45, 52, 64));
         mcBadge.setForeground(new Color(160, 174, 192));
@@ -77,6 +78,9 @@ public class MainWindow extends JFrame {
 
         botMonitorPanel = new BotMonitorPanel();
         configPanel = new ConfigPanel(config, (cfg) -> {
+            mcBadge.setText(" Protocolo: " + cfg.getVersion().getName() + " (" + cfg.getProtocolVersion() + ") | " + cfg.getTargetType() + " ");
+            mcBadge.setBackground(new Color(30, 70, 45));
+            mcBadge.setForeground(new Color(144, 238, 144));
             tabbedPane.setSelectedIndex(0); // volver a Dashboard
             orchestrator.startTest(cfg);
         });
