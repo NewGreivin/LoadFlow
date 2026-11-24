@@ -217,9 +217,9 @@ public class MinecraftClientHandler extends SimpleChannelInboundHandler<ByteBuf>
             }
         } else if (packetId == 0x03) { // Set Compression
             int threshold = PacketBuffer.readVarInt(msg);
-            if (threshold >= 0) {
-                ctx.pipeline().addBefore("codec", "compressionDecoder", new MinecraftCompressionCodec.Decoder(threshold));
-                ctx.pipeline().addBefore("codec", "compressionEncoder", new MinecraftCompressionCodec.Encoder(threshold));
+            if (threshold >= 0 && ctx.pipeline().get("compressionDecoder") == null) {
+                ctx.pipeline().addBefore("handler", "compressionDecoder", new MinecraftCompressionCodec.Decoder(threshold));
+                ctx.pipeline().addBefore("handler", "compressionEncoder", new MinecraftCompressionCodec.Encoder(threshold));
             }
         }
     }
