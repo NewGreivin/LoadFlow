@@ -32,8 +32,8 @@ public class MainWindow extends JFrame {
     public MainWindow() {
         setTitle("LoadFlow — Minecraft Load Tester (v1.0)");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        setSize(1100, 720);
-        setMinimumSize(new Dimension(900, 600));
+        setSize(1180, 780);
+        setMinimumSize(new Dimension(1000, 680));
         setLocationRelativeTo(null);
 
         initComponents();
@@ -85,6 +85,11 @@ public class MainWindow extends JFrame {
             orchestrator.startTest(cfg);
         });
         logConsolePanel = new LogConsolePanel();
+
+        tabbedPane.setFont(tabbedPane.getFont().deriveFont(Font.BOLD, 12.5f));
+        tabbedPane.putClientProperty("JTabbedPane.tabInsets", new Insets(10, 20, 10, 20));
+        tabbedPane.putClientProperty("JTabbedPane.showTabSeparators", true);
+        tabbedPane.putClientProperty("JTabbedPane.tabHeight", 42);
 
         tabbedPane.addTab("  📊 Dashboard & Control  ", dashboardPanel);
         tabbedPane.addTab("  🤖 Monitor de Bots  ", botMonitorPanel);

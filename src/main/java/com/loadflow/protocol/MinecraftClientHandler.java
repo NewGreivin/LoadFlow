@@ -217,9 +217,9 @@ public class MinecraftClientHandler extends SimpleChannelInboundHandler<ByteBuf>
             }
         } else if (packetId == 0x03) { // Set Compression
             int threshold = PacketBuffer.readVarInt(msg);
-            if (threshold >= 0) {
-                ctx.pipeline().addBefore("codec", "compressionDecoder", new MinecraftCompressionCodec.Decoder(threshold));
-                ctx.pipeline().addBefore("codec", "compressionEncoder", new MinecraftCompressionCodec.Encoder(threshold));
+            if (threshold >= 0 && ctx.pipeline().get("compressionDecoder") == null) {
+                ctx.pipeline().addBefore("handler", "compressionDecoder", new MinecraftCompressionCodec.Decoder(threshold));
+                ctx.pipeline().addBefore("handler", "compressionEncoder", new MinecraftCompressionCodec.Encoder(threshold));
             }
         }
     }
@@ -268,13 +268,23 @@ public class MinecraftClientHandler extends SimpleChannelInboundHandler<ByteBuf>
             pong.writeInt(id);
             ctx.writeAndFlush(pong);
             session.incrementPacketsSent();
-        } else if (packetId == 0x40 || packetId == 0x38 || packetId == 0x3E) { // Synchronize Player Position
+        } else if (packetId == 0x38 || packetId == 0x39 || packetId == 0x3C || packetId == 0x3E || packetId == 0x40 || packetId == 0x42) { // Synchronize Player Position
             try {
                 this.currentX = msg.readDouble();
                 this.currentY = msg.readDouble();
                 this.currentZ = msg.readDouble();
                 this.currentYaw = msg.readFloat();
                 this.currentPitch = msg.readFloat();
+                msg.readByte(); // flags
+                if (msg.isReadable()) {
+                    int teleportId = PacketBuffer.readVarInt(msg);
+                    // Confirm Teleportation (Serverbound packet 0x00 en Play para confirmar spawn)
+                    ByteBuf confirmBuf = ctx.alloc().buffer();
+                    PacketBuffer.writeVarInt(confirmBuf, 0x00);
+                    PacketBuffer.writeVarInt(confirmBuf, teleportId);
+                    ctx.writeAndFlush(confirmBuf);
+                    session.incrementPacketsSent();
+                }
             } catch (Exception ignored) {}
         }
     }
