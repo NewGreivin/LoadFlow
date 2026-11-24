@@ -8,10 +8,15 @@ A diferencia de generadores HTTP genéricos (como k6 o JMeter), LoadFlow estable
 
 ## 🚀 Características Principales
 
-- **Aplicación de Escritorio 100% Autónoma:** No requiere Docker, PostgreSQL ni Redis. Todo corre en un único ejecutable local `.jar`.
-- **Protocolo Minecraft 1.20.5 (Java Edition):**
-  - Soporte para fases de Handshake, Login (`online-mode=false`), Configuración (1.20.2+) y Play.
-  - Compresión Zlib automática compatible con el umbral (*compression-threshold*) del servidor.
+- **Aplicación de Escritorio 100% Autónoma:** No requiere Docker, PostgreSQL ni Redis. Todo corre en un único ejecutable local `.exe` o `.jar`.
+- **Multiversión Universal (Minecraft 1.16.5 hasta 1.21.4+):**
+  - Soporta todas las versiones modernas: 1.16.5, 1.17.1, 1.18.2, 1.19.2, 1.19.4, 1.20.1, 1.20.2, 1.20.4, 1.20.5/1.20.6, 1.21/1.21.1, 1.21.2/1.21.3 y 1.21.4.
+  - Reconoce y adapta automáticamente las fases del protocolo (manejo dinámico de fase de Configuración para 1.20.2+ o conexión directa para 1.16 a 1.20.1).
+- **Auto-Detección Inteligente del Servidor:**
+  - Botón **🔍 Auto-Detectar Servidor**: Realiza un *Server List Ping* y detecta automáticamente la versión del servidor, protocolo, jugadores en línea, latencia y tipo de proxy.
+- **Soporte de Proxies (Velocity & BungeeCord / Waterfall):**
+  - Modos de destino para servidores individuales o redes completas gestionadas por proxies.
+  - Soporte de comandos iniciales configurables (ej: `/server lobby` o `/server modalidad`) para que los bots salten del lobby a las modalidades automáticamente tras conectar.
 - **Rendimiento Ultraligero (Netty Asíncrono):**
   - Cada bot consume solo unos pocos megabytes de memoria RAM.
   - Permite simular cientos de bots concurrentes en tu propia máquina sin saturar la CPU.

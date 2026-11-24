@@ -25,12 +25,13 @@ public class MinecraftClientHandler extends SimpleChannelInboundHandler<ByteBuf>
     private final BotSession session;
     private final TestConfig config;
     private ConnectionPhase phase = ConnectionPhase.HANDSHAKE;
-    private ScheduledFuture<?> keepAliveTask;
+    private ScheduledFuture<?> behaviorTask;
     private double currentX = 0;
     private double currentY = 64;
     private double currentZ = 0;
     private float currentYaw = 0;
     private float currentPitch = 0;
+    private boolean initialCommandSent = false;
 
     public MinecraftClientHandler(BotSession session, TestConfig config) {
         this.session = session;
@@ -47,7 +48,7 @@ public class MinecraftClientHandler extends SimpleChannelInboundHandler<ByteBuf>
     private void sendHandshake(ChannelHandlerContext ctx) {
         ByteBuf buf = ctx.alloc().buffer();
         PacketBuffer.writeVarInt(buf, 0x00); // Handshake Packet ID
-        PacketBuffer.writeVarInt(buf, config.getProtocolVersion()); // 766 (1.20.5)
+        PacketBuffer.writeVarInt(buf, config.getProtocolVersion());
         PacketBuffer.writeString(buf, config.getHost());
         buf.writeShort(config.getPort());
         PacketBuffer.writeVarInt(buf, 2); // Next state: 2 (Login)
@@ -61,7 +62,10 @@ public class MinecraftClientHandler extends SimpleChannelInboundHandler<ByteBuf>
         ByteBuf buf = ctx.alloc().buffer();
         PacketBuffer.writeVarInt(buf, 0x00); // Login Start Packet ID
         PacketBuffer.writeString(buf, session.getUsername());
-        PacketBuffer.writeUUID(buf, session.getUuid());
+        // En 1.19.3+ (Protocolo 761+) el paquete incluye el UUID del jugador
+        if (config.getVersion().hasUuidInLoginStart()) {
+            PacketBuffer.writeUUID(buf, session.getUuid());
+        }
         ctx.writeAndFlush(buf);
         session.incrementPacketsSent();
     }
@@ -95,7 +99,7 @@ public class MinecraftClientHandler extends SimpleChannelInboundHandler<ByteBuf>
 
     private void sendKeepAlivePlay(ChannelHandlerContext ctx, long id) {
         ByteBuf buf = ctx.alloc().buffer();
-        PacketBuffer.writeVarInt(buf, 0x18); // Serverbound Keep Alive (1.20.5)
+        PacketBuffer.writeVarInt(buf, config.getVersion().getServerboundKeepAliveId());
         buf.writeLong(id);
         ctx.writeAndFlush(buf);
         session.incrementPacketsSent();
@@ -110,24 +114,55 @@ public class MinecraftClientHandler extends SimpleChannelInboundHandler<ByteBuf>
     }
 
     private void sendPingPlay(ChannelHandlerContext ctx) {
+        if (config.getProtocolVersion() < 764) return; // Solo 1.20.2+ soporta Ping/Pong packet
         ByteBuf buf = ctx.alloc().buffer();
-        PacketBuffer.writeVarInt(buf, 0x27); // Serverbound Ping (1.20.5)
+        PacketBuffer.writeVarInt(buf, 0x27); // Serverbound Ping
         buf.writeInt((int) (System.currentTimeMillis() & 0x7FFFFFFF));
         ctx.writeAndFlush(buf);
         session.incrementPacketsSent();
     }
 
-    private void startBehaviorTask(ChannelHandlerContext ctx) {
-        if (keepAliveTask != null && !keepAliveTask.isCancelled()) return;
+    private void sendInitialCommand(ChannelHandlerContext ctx) {
+        if (initialCommandSent) return;
+        initialCommandSent = true;
 
-        keepAliveTask = ctx.executor().scheduleAtFixedRate(() -> {
+        String cmd = config.getInitialCommand();
+        if (cmd == null || cmd.trim().isEmpty()) return;
+        cmd = cmd.trim();
+
+        try {
+            ByteBuf buf = ctx.alloc().buffer();
+            if (config.getProtocolVersion() >= 759) { // 1.19+ Chat Command
+                String clean = cmd.startsWith("/") ? cmd.substring(1) : cmd;
+                PacketBuffer.writeVarInt(buf, 0x04);
+                PacketBuffer.writeString(buf, clean);
+            } else { // 1.16 - 1.18 Chat Message
+                String full = cmd.startsWith("/") ? cmd : "/" + cmd;
+                PacketBuffer.writeVarInt(buf, 0x03);
+                PacketBuffer.writeString(buf, full);
+            }
+            ctx.writeAndFlush(buf);
+            session.incrementPacketsSent();
+            log.info("Bot {} envió comando inicial: {}", session.getUsername(), cmd);
+        } catch (Exception ignored) {}
+    }
+
+    private void startBehaviorTask(ChannelHandlerContext ctx) {
+        if (behaviorTask != null && !behaviorTask.isCancelled()) return;
+
+        behaviorTask = ctx.executor().scheduleAtFixedRate(() -> {
             if (!ctx.channel().isActive() || phase != ConnectionPhase.PLAY) return;
 
             try {
-                // Medir latencia de red exacta periódicamente
+                // Si hay un comando inicial (ej: /server lobby para Velocity), enviarlo tras entrar
+                if (!initialCommandSent) {
+                    sendInitialCommand(ctx);
+                }
+
+                // Medir latencia RTT periódicamente si la versión lo soporta
                 sendPingPlay(ctx);
 
-                // Pequeña rotación o paso para simular actividad (AFK avoidance)
+                // Rotación o desplazamiento según perfil
                 if ("EXPLORER".equalsIgnoreCase(config.getBehaviorProfile())) {
                     currentYaw = (currentYaw + 15.0f) % 360.0f;
                     currentX += (Math.random() - 0.5) * 0.2;
@@ -137,7 +172,7 @@ public class MinecraftClientHandler extends SimpleChannelInboundHandler<ByteBuf>
                 }
 
                 ByteBuf moveBuf = ctx.alloc().buffer();
-                PacketBuffer.writeVarInt(moveBuf, 0x1B); // Set Player Position and Rotation (1.20.5)
+                PacketBuffer.writeVarInt(moveBuf, config.getVersion().getServerboundPositionAndRotationId());
                 moveBuf.writeDouble(currentX);
                 moveBuf.writeDouble(currentY);
                 moveBuf.writeDouble(currentZ);
@@ -147,7 +182,7 @@ public class MinecraftClientHandler extends SimpleChannelInboundHandler<ByteBuf>
                 ctx.writeAndFlush(moveBuf);
                 session.incrementPacketsSent();
             } catch (Exception e) {
-                log.debug("Error enviando tick de movimiento: {}", e.getMessage());
+                log.debug("Error enviando tick de bot: {}", e.getMessage());
             }
         }, 1, 1, TimeUnit.SECONDS);
     }
@@ -172,7 +207,14 @@ public class MinecraftClientHandler extends SimpleChannelInboundHandler<ByteBuf>
             session.setState(BotState.KICKED);
             ctx.close();
         } else if (packetId == 0x02) { // Login Success
-            sendLoginAcknowledged(ctx);
+            if (config.getVersion().hasConfigurationPhase()) {
+                sendLoginAcknowledged(ctx);
+            } else {
+                // Versiones 1.16 a 1.20.1: Transición directa a PLAY
+                phase = ConnectionPhase.PLAY;
+                session.setState(BotState.CONNECTED);
+                startBehaviorTask(ctx);
+            }
         } else if (packetId == 0x03) { // Set Compression
             int threshold = PacketBuffer.readVarInt(msg);
             if (threshold >= 0) {
@@ -190,7 +232,7 @@ public class MinecraftClientHandler extends SimpleChannelInboundHandler<ByteBuf>
             ctx.close();
         } else if (packetId == 0x03) { // Finish Configuration
             sendFinishConfiguration(ctx);
-        } else if (packetId == 0x04) { // Keep Alive
+        } else if (packetId == 0x04) { // Keep Alive Config
             long id = msg.readLong();
             sendKeepAliveConfig(ctx, id);
         } else if (packetId == 0x0E) { // Select Known Packs
@@ -199,27 +241,34 @@ public class MinecraftClientHandler extends SimpleChannelInboundHandler<ByteBuf>
     }
 
     private void handlePlayPacket(ChannelHandlerContext ctx, int packetId, ByteBuf msg) {
-        if (packetId == 0x1D) { // Disconnect (Play)
+        int discId = config.getVersion().getClientboundDisconnectId();
+        int keepAliveId = config.getVersion().getClientboundKeepAliveId();
+
+        if (packetId == discId) { // Disconnect (Play)
             String reason = PacketBuffer.readString(msg);
             session.setDisconnectReason(cleanChatText(reason));
             session.setState(BotState.KICKED);
             ctx.close();
-        } else if (packetId == 0x26) { // Keep Alive (Play 1.20.5)
-            long keepAliveId = msg.readLong();
-            sendKeepAlivePlay(ctx, keepAliveId);
-        } else if (packetId == 0x36) { // Pong response from Server (Play 1.20.5)
+        } else if (packetId == keepAliveId) { // Keep Alive
+            long id = msg.readLong();
+            long sendTime = System.currentTimeMillis();
+            sendKeepAlivePlay(ctx, id);
+            if (session.getLatencyMs() < 0 || config.getProtocolVersion() < 764) {
+                session.setLatencyMs(Math.max(1, System.currentTimeMillis() - sendTime));
+            }
+        } else if (packetId == 0x36 && config.getProtocolVersion() >= 764) { // Pong (Play 1.20.2+)
             int pingId = msg.readInt();
             long now = System.currentTimeMillis() & 0x7FFFFFFF;
             long rtt = (now >= pingId) ? (now - pingId) : 1;
             session.setLatencyMs(rtt);
-        } else if (packetId == 0x35) { // Ping from Server (Play 1.20.5)
+        } else if (packetId == 0x35 && config.getProtocolVersion() >= 764) { // Ping from Server
             int id = msg.readInt();
             ByteBuf pong = ctx.alloc().buffer();
-            PacketBuffer.writeVarInt(pong, 0x27); // Pong response
+            PacketBuffer.writeVarInt(pong, 0x27);
             pong.writeInt(id);
             ctx.writeAndFlush(pong);
             session.incrementPacketsSent();
-        } else if (packetId == 0x40) { // Synchronize Player Position
+        } else if (packetId == 0x40 || packetId == 0x38 || packetId == 0x3E) { // Synchronize Player Position
             try {
                 this.currentX = msg.readDouble();
                 this.currentY = msg.readDouble();
@@ -237,8 +286,8 @@ public class MinecraftClientHandler extends SimpleChannelInboundHandler<ByteBuf>
 
     @Override
     public void channelInactive(ChannelHandlerContext ctx) {
-        if (keepAliveTask != null) {
-            keepAliveTask.cancel(true);
+        if (behaviorTask != null) {
+            behaviorTask.cancel(true);
         }
         if (session.getState() != BotState.KICKED && session.getState() != BotState.ERROR) {
             session.setState(BotState.DISCONNECTED);
