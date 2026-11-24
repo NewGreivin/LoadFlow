@@ -1,6 +1,35 @@
+# Gradle
 .gradle/
 build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# Build Artifacts & Distribution Packages
+dist/
+out/
+target/
+*.jar
+*.war
+*.zip
+*.tar.gz
+*.exe
+
+# IDE & Editor files
 .idea/
 *.iml
+*.ipr
+*.iws
+.vscode/
+.settings/
+.classpath
+.project
+
+# Logs & Crash dumps
 *.log
-out/
+*.tmp
+hs_err_pid*
+replay_pid*
+
+# OS Generated
+Thumbs.db
+.DS_Store
+desktop.ini
