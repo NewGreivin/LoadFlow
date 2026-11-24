@@ -32,6 +32,9 @@ public class MinecraftBot {
         b.group(workerGroup)
          .channel(NioSocketChannel.class)
          .option(ChannelOption.TCP_NODELAY, true)
+         .option(ChannelOption.SO_KEEPALIVE, true)
+         .option(ChannelOption.SO_REUSEADDR, true)
+         .option(ChannelOption.ALLOCATOR, io.netty.buffer.PooledByteBufAllocator.DEFAULT)
          .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 10000)
          .handler(new ChannelInitializer<SocketChannel>() {
              @Override

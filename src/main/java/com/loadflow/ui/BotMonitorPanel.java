@@ -73,6 +73,7 @@ public class BotMonitorPanel extends JPanel {
         }
 
         public void filter(String query, String filter) {
+            int previousSize = displayedSessions.size();
             displayedSessions = allSessions.stream().filter(s -> {
                 boolean matchQuery = query.isEmpty() || s.getUsername().toLowerCase().contains(query);
                 boolean matchFilter = true;
@@ -88,7 +89,12 @@ public class BotMonitorPanel extends JPanel {
                 }
                 return matchQuery && matchFilter;
             }).toList();
-            fireTableDataChanged();
+
+            if (displayedSessions.size() == previousSize && previousSize > 0) {
+                fireTableRowsUpdated(0, previousSize - 1);
+            } else {
+                fireTableDataChanged();
+            }
         }
 
         @Override

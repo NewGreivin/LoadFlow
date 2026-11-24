@@ -109,6 +109,14 @@ public class MinecraftClientHandler extends SimpleChannelInboundHandler<ByteBuf>
         session.incrementPacketsSent();
     }
 
+    private void sendPingPlay(ChannelHandlerContext ctx) {
+        ByteBuf buf = ctx.alloc().buffer();
+        PacketBuffer.writeVarInt(buf, 0x27); // Serverbound Ping (1.20.5)
+        buf.writeInt((int) (System.currentTimeMillis() & 0x7FFFFFFF));
+        ctx.writeAndFlush(buf);
+        session.incrementPacketsSent();
+    }
+
     private void startBehaviorTask(ChannelHandlerContext ctx) {
         if (keepAliveTask != null && !keepAliveTask.isCancelled()) return;
 
@@ -116,6 +124,9 @@ public class MinecraftClientHandler extends SimpleChannelInboundHandler<ByteBuf>
             if (!ctx.channel().isActive() || phase != ConnectionPhase.PLAY) return;
 
             try {
+                // Medir latencia de red exacta periódicamente
+                sendPingPlay(ctx);
+
                 // Pequeña rotación o paso para simular actividad (AFK avoidance)
                 if ("EXPLORER".equalsIgnoreCase(config.getBehaviorProfile())) {
                     currentYaw = (currentYaw + 15.0f) % 360.0f;
@@ -195,9 +206,19 @@ public class MinecraftClientHandler extends SimpleChannelInboundHandler<ByteBuf>
             ctx.close();
         } else if (packetId == 0x26) { // Keep Alive (Play 1.20.5)
             long keepAliveId = msg.readLong();
-            long sendTime = System.currentTimeMillis();
             sendKeepAlivePlay(ctx, keepAliveId);
-            session.setLatencyMs(Math.max(1, System.currentTimeMillis() - sendTime));
+        } else if (packetId == 0x36) { // Pong response from Server (Play 1.20.5)
+            int pingId = msg.readInt();
+            long now = System.currentTimeMillis() & 0x7FFFFFFF;
+            long rtt = (now >= pingId) ? (now - pingId) : 1;
+            session.setLatencyMs(rtt);
+        } else if (packetId == 0x35) { // Ping from Server (Play 1.20.5)
+            int id = msg.readInt();
+            ByteBuf pong = ctx.alloc().buffer();
+            PacketBuffer.writeVarInt(pong, 0x27); // Pong response
+            pong.writeInt(id);
+            ctx.writeAndFlush(pong);
+            session.incrementPacketsSent();
         } else if (packetId == 0x40) { // Synchronize Player Position
             try {
                 this.currentX = msg.readDouble();

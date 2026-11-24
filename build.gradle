@@ -39,6 +39,12 @@ dependencies {
 
 application {
     mainClass = 'com.loadflow.LoadFlowApp'
+    applicationDefaultJvmArgs = [
+        '-XX:+UseG1GC',
+        '-XX:+UseStringDeduplication',
+        '-Dio.netty.allocator.type=pooled',
+        '-Dio.netty.leakDetection.level=DISABLED'
+    ]
 }
 
 jar {
@@ -71,6 +77,10 @@ tasks.register('packageExe', Exec) {
             '--input', 'build/libs',
             '--main-jar', 'LoadFlow-1.0.0-all.jar',
             '--main-class', 'com.loadflow.LoadFlowApp',
+            '--java-options', '-XX:+UseG1GC',
+            '--java-options', '-XX:+UseStringDeduplication',
+            '--java-options', '-Dio.netty.allocator.type=pooled',
+            '--java-options', '-Dio.netty.leakDetection.level=DISABLED',
             '--dest', 'dist'
 }
 

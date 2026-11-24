@@ -15,6 +15,7 @@ public class MinecraftCompressionCodec {
     public static class Decoder extends ByteToMessageDecoder {
         private final int threshold;
         private final Inflater inflater = new Inflater();
+        private final byte[] buffer = new byte[8192];
 
         public Decoder(int threshold) {
             this.threshold = threshold;
@@ -32,18 +33,36 @@ public class MinecraftCompressionCodec {
                     throw new DecoderException("Badly compressed packet - size " + dataLength + " is below threshold " + threshold);
                 }
 
-                byte[] compressed = new byte[in.readableBytes()];
-                in.readBytes(compressed);
+                int compressedLen = in.readableBytes();
+                byte[] compressed;
+                int offset = 0;
+                if (in.hasArray()) {
+                    compressed = in.array();
+                    offset = in.arrayOffset() + in.readerIndex();
+                    in.skipBytes(compressedLen);
+                } else {
+                    compressed = new byte[compressedLen];
+                    in.readBytes(compressed);
+                }
 
                 inflater.reset();
-                inflater.setInput(compressed);
+                inflater.setInput(compressed, offset, compressedLen);
 
-                byte[] decompressed = new byte[dataLength];
-                inflater.inflate(decompressed);
-
-                ByteBuf decompBuf = ctx.alloc().buffer(dataLength);
-                decompBuf.writeBytes(decompressed);
-                out.add(decompBuf);
+                ByteBuf decompBuf = ctx.alloc().buffer(dataLength, dataLength);
+                try {
+                    while (!inflater.finished() && decompBuf.isWritable()) {
+                        int count = inflater.inflate(buffer);
+                        if (count > 0) {
+                            decompBuf.writeBytes(buffer, 0, count);
+                        } else if (inflater.needsInput()) {
+                            break;
+                        }
+                    }
+                    out.add(decompBuf);
+                } catch (Exception e) {
+                    decompBuf.release();
+                    throw e;
+                }
             }
         }
     }
@@ -51,6 +70,7 @@ public class MinecraftCompressionCodec {
     public static class Encoder extends MessageToByteEncoder<ByteBuf> {
         private final int threshold;
         private final Deflater deflater = new Deflater();
+        private final byte[] buffer = new byte[8192];
 
         public Encoder(int threshold) {
             this.threshold = threshold;
@@ -63,16 +83,23 @@ public class MinecraftCompressionCodec {
                 PacketBuffer.writeVarInt(out, 0);
                 out.writeBytes(msg);
             } else {
-                byte[] uncompressed = new byte[uncompressedLength];
-                msg.readBytes(uncompressed);
+                byte[] uncompressed;
+                int offset = 0;
+                if (msg.hasArray()) {
+                    uncompressed = msg.array();
+                    offset = msg.arrayOffset() + msg.readerIndex();
+                    msg.skipBytes(uncompressedLength);
+                } else {
+                    uncompressed = new byte[uncompressedLength];
+                    msg.readBytes(uncompressed);
+                }
 
                 PacketBuffer.writeVarInt(out, uncompressedLength);
 
                 deflater.reset();
-                deflater.setInput(uncompressed);
+                deflater.setInput(uncompressed, offset, uncompressedLength);
                 deflater.finish();
 
-                byte[] buffer = new byte[1024];
                 while (!deflater.finished()) {
                     int count = deflater.deflate(buffer);
                     out.writeBytes(buffer, 0, count);

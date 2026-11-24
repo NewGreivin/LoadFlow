@@ -1,6 +1,7 @@
 package com.loadflow.model;
 
 import java.util.UUID;
+import java.util.concurrent.atomic.LongAdder;
 
 public class BotSession {
     private final int id;
@@ -11,8 +12,8 @@ public class BotSession {
     private volatile long disconnectedAt = 0;
     private volatile long latencyMs = -1;
     private volatile String disconnectReason = "";
-    private volatile long packetsReceived = 0;
-    private volatile long packetsSent = 0;
+    private final LongAdder packetsReceived = new LongAdder();
+    private final LongAdder packetsSent = new LongAdder();
 
     public BotSession(int id, String username, UUID uuid) {
         this.id = id;
@@ -77,18 +78,18 @@ public class BotSession {
     }
 
     public long getPacketsReceived() {
-        return packetsReceived;
+        return packetsReceived.sum();
     }
 
     public void incrementPacketsReceived() {
-        this.packetsReceived++;
+        this.packetsReceived.increment();
     }
 
     public long getPacketsSent() {
-        return packetsSent;
+        return packetsSent.sum();
     }
 
     public void incrementPacketsSent() {
-        this.packetsSent++;
+        this.packetsSent.increment();
     }
 }
